@@ -10,40 +10,40 @@ TOOL_SCHEMA = {
     "description": (
         "Scans supermarket receipt images, extracts product and store information, "
         "and stores it in a database for later querying. "
-        "Actions: scan (legacy OCR placeholder), store (accepts pre-extracted data "
-        "from the assistant's vision read), reclassify, add_item (append item to existing receipt), query, stats, list, categories, export."
+        "Actions: store (accepts pre-extracted data from the assistant's vision read), "
+        "reclassify (change product categories), add_item (append item to existing receipt), "
+        "query (search by product name, date range, or category), "
+        "stats (spending summary by category), list (all receipts), "
+        "categories (browse or list products in a category), export (JSON dump)."
     ),
     "parameters": {
         "type": "object",
         "properties": {
             "action": {
                 "type": "string",
-                "enum": ["scan", "store", "reclassify", "add_item", "query", "stats", "list", "categories", "export"],
+                "enum": ["scan", "store", "reclassify", "add_item", "query",
+                         "stats", "list", "categories", "export"],
                 "description": "The action to perform."
             },
             "image_path": {
                 "type": "string",
                 "description": "Path to the receipt image file for 'scan' action."
             },
-            "query": {
+            "product_name": {
                 "type": "string",
-                "description": "SQL-like query string for 'query' action."
+                "description": "Product name (exact or substring) for 'query' and 'reclassify' actions."
             },
             "category_name": {
                 "type": "string",
-                "description": "Name of the category to add/edit for 'categories' action."
-            },
-            "product_name": {
-                "type": "string",
-                "description": "Product name for certain queries."
+                "description": "Category name for 'reclassify', 'query', or 'categories' actions."
             },
             "start_date": {
                 "type": "string",
-                "description": "Start date (YYYY-MM-DD) for time-based queries."
+                "description": "Start date (YYYY-MM-DD) for time-based queries/stats."
             },
             "end_date": {
                 "type": "string",
-                "description": "End date (YYYY-MM-DD) for time-based queries."
+                "description": "End date (YYYY-MM-DD) for time-based queries/stats."
             },
             "supermarket": {
                 "type": "string",
@@ -57,12 +57,26 @@ TOOL_SCHEMA = {
                 "type": "number",
                 "description": "Receipt total amount for 'store' action."
             },
+            "receipt_id": {
+                "type": "integer",
+                "description": "Receipt ID for 'add_item' action."
+            },
             "items": {
                 "type": "string",
                 "description": (
                     "JSON array of items for 'store' action. Each item: "
                     '{"name":"...","quantity":1.0,"unit":"ud","unit_price":1.0,'
-                    '"total_price":1.0,"category":"..."}'
+                    '"total_price":1.0,"category":"..."}. '
+                    "total_price is auto-derived from quantity*unit_price if omitted."
+                ),
+            },
+            "item": {
+                "type": "string",
+                "description": (
+                    "JSON object for 'add_item' action: "
+                    '{"name":"...","quantity":1.0,"unit":"ud","unit_price":1.0,'
+                    '"total_price":1.0,"category":"..."}. '
+                    "total_price is auto-derived from quantity*unit_price if omitted."
                 ),
             },
         },
@@ -70,13 +84,62 @@ TOOL_SCHEMA = {
     },
 }
 
-DATA_DIR = Path(__file__).resolve().parent.parent.parent / "receipt_scanner_data"
-DB_PATH = DATA_DIR / "receipts.db"
+DB_PATH = None  # resolved at runtime via ctx.workspace
+
+
+def _resolve_db(workspace: str) -> Path:
+    """Set DB_PATH from ctx.workspace (called once per execute)."""
+    global DB_PATH
+    data_dir = Path(workspace) / ".jaato" / "receipt_scanner"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    DB_PATH = data_dir / "receipts.db"
+
+
+def _connect():
+    """Return a connection with foreign keys enabled."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+
+def _normalize_date(date_str: str) -> str:
+    """Validate and normalize a date string to YYYY-MM-DD."""
+    # Try DD/MM/YY or DD/MM/YYYY
+    m = re.match(r"^(\d{1,2})/(\d{1,2})/(\d{2,4})$", date_str)
+    if m:
+        d, mo, y = m.groups()
+        if len(y) == 2:
+            y = "20" + y
+        return f"{y}-{mo.zfill(2)}-{d.zfill(2)}"
+    # Already YYYY-MM-DD?
+    m = re.match(r"^(\d{4})-(\d{2})-(\d{2})$", date_str)
+    if m:
+        return date_str
+    raise ValueError(
+        f"Invalid date '{date_str}'. Expected YYYY-MM-DD or DD/MM/YYYY."
+    )
+
+
+def _derive_prices(item: dict) -> tuple:
+    """Ensure both unit_price and total_price are present and consistent.
+    Returns (unit_price, total_price).
+    """
+    qty = float(item.get("quantity", 1) or 1)
+    up = item.get("unit_price")
+    tp = item.get("total_price")
+    if tp is not None and up is None:
+        up = float(tp) / qty if qty else 0
+    elif up is not None and tp is None:
+        tp = float(up) * qty
+    elif up is None and tp is None:
+        up, tp = 0.0, 0.0
+    else:
+        up, tp = float(up), float(tp)
+    return up, tp
 
 
 def _init_db():
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(DB_PATH) as conn:
+    with _connect() as conn:
         c = conn.cursor()
         c.execute("""CREATE TABLE IF NOT EXISTS supermarkets (
             id INTEGER PRIMARY KEY, name TEXT UNIQUE
@@ -101,7 +164,7 @@ def _init_db():
 
 
 def _insert_supermarket(name: str) -> int:
-    with sqlite3.connect(DB_PATH) as conn:
+    with _connect() as conn:
         c = conn.cursor()
         c.execute("INSERT OR IGNORE INTO supermarkets (name) VALUES (?)", (name,))
         c.execute("SELECT id FROM supermarkets WHERE name = ?", (name,))
@@ -111,7 +174,7 @@ def _insert_supermarket(name: str) -> int:
 
 
 def _insert_product(name: str, normalized_name: str, category: str) -> int:
-    with sqlite3.connect(DB_PATH) as conn:
+    with _connect() as conn:
         c = conn.cursor()
         c.execute(
             "INSERT OR IGNORE INTO products (name, normalized_name, category) "
@@ -126,7 +189,7 @@ def _insert_product(name: str, normalized_name: str, category: str) -> int:
 
 def _insert_receipt(supermarket_id: int, date: str, total_amount: float,
                     image_path: str) -> int:
-    with sqlite3.connect(DB_PATH) as conn:
+    with _connect() as conn:
         c = conn.cursor()
         c.execute(
             "INSERT INTO receipts (supermarket_id, date, total_amount, image_path) "
@@ -139,7 +202,7 @@ def _insert_receipt(supermarket_id: int, date: str, total_amount: float,
 
 def _insert_receipt_item(receipt_id: int, product_id: int, quantity: float,
                          unit: str, unit_price: float, total_price: float):
-    with sqlite3.connect(DB_PATH) as conn:
+    with _connect() as conn:
         c = conn.cursor()
         c.execute(
             "INSERT INTO receipt_items "
@@ -151,20 +214,26 @@ def _insert_receipt_item(receipt_id: int, product_id: int, quantity: float,
 
 async def execute(args: Dict[str, Any], ctx) -> Dict[str, Any]:
     action = args["action"]
+    _resolve_db(ctx.workspace)
     _init_db()
 
     # --- STORE: accept pre-extracted data from the assistant ---
     if action == "store":
         supermarket = args.get("supermarket")
-        date = args.get("date")
+        date_raw = args.get("date")
         total = args.get("total")
         items_raw = args.get("items")
         image_path = args.get("image_path", "")
 
-        if not supermarket or not date or total is None or not items_raw:
+        if not supermarket or not date_raw or total is None or not items_raw:
             return {"error": (
                 "'store' requires: supermarket, date, total, items (JSON array)."
             )}
+
+        try:
+            date = _normalize_date(date_raw)
+        except ValueError as e:
+            return {"error": str(e)}
 
         try:
             items = json.loads(items_raw)
@@ -177,14 +246,13 @@ async def execute(args: Dict[str, Any], ctx) -> Dict[str, Any]:
         stored = 0
         for it in items:
             name = it.get("name", "Unknown")
-            qty = it.get("quantity", 1.0)
+            qty = float(it.get("quantity", 1) or 1)
             unit = it.get("unit", "ud")
-            up = it.get("unit_price", it.get("total_price", 0))
-            tp = it.get("total_price", 0)
+            up, tp = _derive_prices(it)
             cat = it.get("category", "General")
             norm = name.lower().strip()
             pid = _insert_product(name, norm, cat)
-            _insert_receipt_item(rid, pid, float(qty), unit, float(up), float(tp))
+            _insert_receipt_item(rid, pid, qty, unit, up, tp)
             stored += 1
 
         return {"result": (
@@ -195,7 +263,7 @@ async def execute(args: Dict[str, Any], ctx) -> Dict[str, Any]:
 
     # --- LIST: show all receipts ---
     elif action == "list":
-        with sqlite3.connect(DB_PATH) as conn:
+        with _connect() as conn:
             c = conn.cursor()
             c.execute(
                 "SELECT r.id, s.name, r.date, r.total_amount "
@@ -210,7 +278,7 @@ async def execute(args: Dict[str, Any], ctx) -> Dict[str, Any]:
                 f"  #{rid} | {sname} | {date} | {total:.2f} EUR")
         return {"result": "\n".join(lines)}
 
-    # --- QUERY: search products/items ---
+    # --- QUERY: search products/items by name, date, category ---
     elif action == "query":
         product_name = args.get("product_name", "")
         start = args.get("start_date")
@@ -220,8 +288,7 @@ async def execute(args: Dict[str, Any], ctx) -> Dict[str, Any]:
         conditions = []
         params = []
         if product_name:
-            conditions.append(
-                "p.normalized_name LIKE ?")
+            conditions.append("p.normalized_name LIKE ?")
             params.append(f"%{product_name.lower()}%")
         if start:
             conditions.append("r.date >= ?")
@@ -235,7 +302,7 @@ async def execute(args: Dict[str, Any], ctx) -> Dict[str, Any]:
 
         where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
 
-        with sqlite3.connect(DB_PATH) as conn:
+        with _connect() as conn:
             c = conn.cursor()
             c.execute(
                 f"SELECT s.name, r.date, p.name, ri.quantity, ri.unit, "
@@ -272,7 +339,7 @@ async def execute(args: Dict[str, Any], ctx) -> Dict[str, Any]:
 
         where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
 
-        with sqlite3.connect(DB_PATH) as conn:
+        with _connect() as conn:
             c = conn.cursor()
             c.execute(
                 f"SELECT COUNT(*) FROM receipts r{where}", params)
@@ -303,12 +370,11 @@ async def execute(args: Dict[str, Any], ctx) -> Dict[str, Any]:
             lines.append(f"  {cat}: {amount:.2f} EUR ({count} items)")
         return {"result": "\n".join(lines)}
 
-    # --- CATEGORIES: list or manage categories ---
+    # --- CATEGORIES: list or browse ---
     elif action == "categories":
         cat_name = args.get("category_name")
         if cat_name:
-            # List products in a category
-            with sqlite3.connect(DB_PATH) as conn:
+            with _connect() as conn:
                 c = conn.cursor()
                 c.execute(
                     "SELECT name, normalized_name FROM products "
@@ -321,8 +387,7 @@ async def execute(args: Dict[str, Any], ctx) -> Dict[str, Any]:
                 lines.append(f"  - {name}")
             return {"result": "\n".join(lines)}
         else:
-            # List all categories with counts
-            with sqlite3.connect(DB_PATH) as conn:
+            with _connect() as conn:
                 c = conn.cursor()
                 c.execute(
                     "SELECT category, COUNT(*) FROM products "
@@ -337,19 +402,15 @@ async def execute(args: Dict[str, Any], ctx) -> Dict[str, Any]:
 
     # --- EXPORT: dump as JSON ---
     elif action == "export":
-        with sqlite3.connect(DB_PATH) as conn:
+        with _connect() as conn:
             conn.row_factory = sqlite3.Row
             c = conn.cursor()
-
             c.execute("SELECT * FROM supermarkets")
             supermarkets = [dict(r) for r in c.fetchall()]
-
             c.execute("SELECT * FROM products")
             products = [dict(r) for r in c.fetchall()]
-
             c.execute("SELECT * FROM receipts")
             receipts = [dict(r) for r in c.fetchall()]
-
             c.execute("SELECT * FROM receipt_items")
             items = [dict(r) for r in c.fetchall()]
 
@@ -359,7 +420,7 @@ async def execute(args: Dict[str, Any], ctx) -> Dict[str, Any]:
             "receipts": receipts,
             "receipt_items": items,
         }
-        out_path = DATA_DIR / "export.json"
+        out_path = DB_PATH.parent / "export.json"
         out_path.write_text(json.dumps(data, indent=2, default=str))
         return {"result": (
             f"Exported to {out_path}\n"
@@ -375,7 +436,7 @@ async def execute(args: Dict[str, Any], ctx) -> Dict[str, Any]:
         new_cat = args.get("category_name", "")
         if not product_name or not new_cat:
             return {"error": "'reclassify' requires product_name and category_name."}
-        with sqlite3.connect(DB_PATH) as conn:
+        with _connect() as conn:
             c = conn.cursor()
             c.execute(
                 "UPDATE products SET category = ? WHERE normalized_name = ?",
@@ -397,15 +458,13 @@ async def execute(args: Dict[str, Any], ctx) -> Dict[str, Any]:
         except (json.JSONDecodeError, TypeError) as e:
             return {"error": f"Invalid item JSON: {e}"}
         name = it.get("name", "Unknown")
-        norm = name.lower().strip()
+        qty = float(it.get("quantity", 1) or 1)
+        unit = it.get("unit", "ud")
+        up, tp = _derive_prices(it)
         cat = it.get("category", "General")
+        norm = name.lower().strip()
         pid = _insert_product(name, norm, cat)
-        _insert_receipt_item(
-            rid, pid,
-            float(it.get("quantity", 1.0)),
-            it.get("unit", "ud"),
-            float(it.get("unit_price", it.get("total_price", 0))),
-            float(it.get("total_price", 0)))
+        _insert_receipt_item(rid, pid, qty, unit, up, tp)
         return {"result": f"Added '{name}' to receipt #{rid} [{cat}]."}
 
     # --- SCAN: legacy placeholder (no real OCR) ---
