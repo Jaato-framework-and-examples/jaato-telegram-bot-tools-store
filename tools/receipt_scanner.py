@@ -3,6 +3,7 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
+from contextlib import closing
 from typing import List, Dict, Any, Optional
 
 TOOL_SCHEMA = {
@@ -139,7 +140,7 @@ def _derive_prices(item: dict) -> tuple:
 
 
 def _init_db():
-    with _connect() as conn:
+    with closing(_connect()) as conn, conn:
         c = conn.cursor()
         c.execute("""CREATE TABLE IF NOT EXISTS supermarkets (
             id INTEGER PRIMARY KEY, name TEXT UNIQUE
@@ -164,7 +165,7 @@ def _init_db():
 
 
 def _insert_supermarket(name: str) -> int:
-    with _connect() as conn:
+    with closing(_connect()) as conn, conn:
         c = conn.cursor()
         c.execute("INSERT OR IGNORE INTO supermarkets (name) VALUES (?)", (name,))
         c.execute("SELECT id FROM supermarkets WHERE name = ?", (name,))
@@ -174,7 +175,7 @@ def _insert_supermarket(name: str) -> int:
 
 
 def _insert_product(name: str, normalized_name: str, category: str) -> int:
-    with _connect() as conn:
+    with closing(_connect()) as conn, conn:
         c = conn.cursor()
         c.execute(
             "INSERT OR IGNORE INTO products (name, normalized_name, category) "
@@ -189,7 +190,7 @@ def _insert_product(name: str, normalized_name: str, category: str) -> int:
 
 def _insert_receipt(supermarket_id: int, date: str, total_amount: float,
                     image_path: str) -> int:
-    with _connect() as conn:
+    with closing(_connect()) as conn, conn:
         c = conn.cursor()
         c.execute(
             "INSERT INTO receipts (supermarket_id, date, total_amount, image_path) "
@@ -202,7 +203,7 @@ def _insert_receipt(supermarket_id: int, date: str, total_amount: float,
 
 def _insert_receipt_item(receipt_id: int, product_id: int, quantity: float,
                          unit: str, unit_price: float, total_price: float):
-    with _connect() as conn:
+    with closing(_connect()) as conn, conn:
         c = conn.cursor()
         c.execute(
             "INSERT INTO receipt_items "
@@ -263,7 +264,7 @@ async def execute(args: Dict[str, Any], ctx) -> Dict[str, Any]:
 
     # --- LIST: show all receipts ---
     elif action == "list":
-        with _connect() as conn:
+        with closing(_connect()) as conn, conn:
             c = conn.cursor()
             c.execute(
                 "SELECT r.id, s.name, r.date, r.total_amount "
@@ -302,7 +303,7 @@ async def execute(args: Dict[str, Any], ctx) -> Dict[str, Any]:
 
         where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
 
-        with _connect() as conn:
+        with closing(_connect()) as conn, conn:
             c = conn.cursor()
             c.execute(
                 f"SELECT s.name, r.date, p.name, ri.quantity, ri.unit, "
@@ -339,7 +340,7 @@ async def execute(args: Dict[str, Any], ctx) -> Dict[str, Any]:
 
         where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
 
-        with _connect() as conn:
+        with closing(_connect()) as conn, conn:
             c = conn.cursor()
             c.execute(
                 f"SELECT COUNT(*) FROM receipts r{where}", params)
@@ -374,7 +375,7 @@ async def execute(args: Dict[str, Any], ctx) -> Dict[str, Any]:
     elif action == "categories":
         cat_name = args.get("category_name")
         if cat_name:
-            with _connect() as conn:
+            with closing(_connect()) as conn, conn:
                 c = conn.cursor()
                 c.execute(
                     "SELECT name, normalized_name FROM products "
@@ -387,7 +388,7 @@ async def execute(args: Dict[str, Any], ctx) -> Dict[str, Any]:
                 lines.append(f"  - {name}")
             return {"result": "\n".join(lines)}
         else:
-            with _connect() as conn:
+            with closing(_connect()) as conn, conn:
                 c = conn.cursor()
                 c.execute(
                     "SELECT category, COUNT(*) FROM products "
@@ -402,7 +403,7 @@ async def execute(args: Dict[str, Any], ctx) -> Dict[str, Any]:
 
     # --- EXPORT: dump as JSON ---
     elif action == "export":
-        with _connect() as conn:
+        with closing(_connect()) as conn, conn:
             conn.row_factory = sqlite3.Row
             c = conn.cursor()
             c.execute("SELECT * FROM supermarkets")
@@ -436,7 +437,7 @@ async def execute(args: Dict[str, Any], ctx) -> Dict[str, Any]:
         new_cat = args.get("category_name", "")
         if not product_name or not new_cat:
             return {"error": "'reclassify' requires product_name and category_name."}
-        with _connect() as conn:
+        with closing(_connect()) as conn, conn:
             c = conn.cursor()
             c.execute(
                 "UPDATE products SET category = ? WHERE normalized_name = ?",
