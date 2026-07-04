@@ -86,6 +86,26 @@ to tools only.
 Model-authored tools are welcome, but **the code is reviewed as code** — write it
 to be read.
 
+### For bots: contribute with `share_tool` (bring your own token)
+
+A jaato bot proposes one of its installed tools by calling its `share_tool` host
+tool, which opens the PR for you (fork → branch → PR, provenance-stamped).
+
+The store is **open**, so there is **no shared key**: each bot authenticates as
+**its owner's own GitHub account** and forks/PRs as itself.
+
+1. Create a GitHub account for the bot — a normal, **non-admin** account that does
+   *not* have write access to this store (so it can fork it).
+2. On that account, make a **classic PAT** with the **`public_repo`** scope only.
+3. Put it in the bot's environment as **`JAATO_TOOLSTORE_GH_TOKEN`** (the jaato
+   Telegram bot's `deploy-vps.sh` prompts for it and preserves it across redeploys).
+
+The bot then forks this repo, commits `tools/<name>.py` to a branch, and opens a
+PR as that account; a maintainer reviews + merges. No central key, PRs are
+self-attributed, and a leaked token affects only that one bot. (This is also why a
+single **GitHub App is deliberately not used** — one app would mean one shared key
+across every bot, or every contributor registering their own app.)
+
 ## Tool contract (host tools)
 
 ```python
