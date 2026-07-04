@@ -1,0 +1,209 @@
+{
+  "version": 1,
+  "tools": [
+    {
+      "name": "approval_webhook",
+      "file": "tools/approval_webhook.py",
+      "description": "Exposes an HTTP endpoint where external systems POST approval requests. Notifies you in Telegram with inline buttons and returns your decision to the caller automatically. Actions: 'start' (launch server), 'stop' (shut down), 'status' (check server health).",
+      "deps": [],
+      "sha256": "c6f0495ca331293fea5cae69861e9b113224b2a6b72f01137c539b25f260910c",
+      "provenance": {
+        "contributed_by": "curated",
+        "source": "jaato-client-telegram/examples/host_tools",
+        "added": "2026-07-04"
+      }
+    },
+    {
+      "name": "daily_ephemerides",
+      "file": "tools/daily_ephemerides.py",
+      "description": "Daily historical ephemerides -- tells you what happened on this day in history. Actions: 'now' (send today's ephemerides immediately), 'schedule' (set up a daily recurring broadcast at a given time), 'cancel' (cancel the daily schedule).",
+      "deps": [],
+      "sha256": "fc6a86bdbb8859be2180818dfecc9373f669ec66da655332b58fccc679e73e03",
+      "provenance": {
+        "contributed_by": "curated",
+        "source": "jaato-client-telegram/examples/host_tools",
+        "added": "2026-07-04"
+      }
+    },
+    {
+      "name": "die_roller",
+      "file": "tools/die_roller.py",
+      "description": "Roll one or more dice. Supports standard notation like 'd20', '2d6', '1d20+3', or explicit sides/rolls parameters.",
+      "deps": [],
+      "sha256": "09345523f610a3257d93f12d4e5985df6fd183358ba4146d0b2a7983f3c60ddf",
+      "provenance": {
+        "contributed_by": "curated",
+        "source": "jaato-client-telegram/examples/host_tools",
+        "added": "2026-07-04"
+      }
+    },
+    {
+      "name": "docker_report",
+      "file": "tools/docker_report.py",
+      "description": "Report Docker container status with health-check awareness. Shows a summary (running/stopped/unhealthy counts) followed by a compact per-container list with name, status, health, and ports. Can filter by name substring and optionally include stopped containers.",
+      "deps": [],
+      "sha256": "6f6de2985725a7cfcf9317fa7967b7504cd5d590d97f5374587fa960c430093c",
+      "provenance": {
+        "contributed_by": "curated",
+        "source": "jaato-client-telegram/examples/host_tools",
+        "added": "2026-07-04"
+      }
+    },
+    {
+      "name": "docker_status",
+      "file": "tools/docker_status.py",
+      "description": "Report the status of Docker containers. Shows running, stopped, and total counts with per-container details including name, image, status, ports, and uptime.",
+      "deps": [],
+      "sha256": "ae2b5bced089933e2cf14787249e8d39237d376b3d19df355ebaad407dd97b18",
+      "provenance": {
+        "contributed_by": "curated",
+        "source": "jaato-client-telegram/examples/host_tools",
+        "added": "2026-07-04"
+      }
+    },
+    {
+      "name": "gmail",
+      "file": "tools/gmail.py",
+      "description": "Access a Gmail account via OAuth2/Gmail API. Actions: 'configure' (set OAuth2 client credentials), 'auth' (start OAuth flow or exchange code), 'check' (fetch unread emails), 'read' (full email by ID), 'watch' (periodic polling with Telegram notifications), 'unwatch' (stop polling), 'status' (connection health), 'doctor' (diagnose/dryrun/fix auth issues).",
+      "deps": [],
+      "sha256": "28b0589a0b8b5de5066412672f351556ed0ce2092a1265b8d4a7cc4ba8c3fb71",
+      "provenance": {
+        "contributed_by": "curated",
+        "source": "jaato-client-telegram/examples/host_tools",
+        "added": "2026-07-04"
+      }
+    },
+    {
+      "name": "image_search",
+      "file": "tools/image_search.py",
+      "description": "Search the internet for a publicly available image matching a query, pick the best result, and send it to the Telegram user with a description. Uses DuckDuckGo image search (no API key required).",
+      "deps": [],
+      "sha256": "e2f138db1eaa2fce4a707e4b97204bfaeadea785692ab2090d78ac26f9ee6c78",
+      "provenance": {
+        "contributed_by": "curated",
+        "source": "jaato-client-telegram/examples/host_tools",
+        "added": "2026-07-04"
+      }
+    },
+    {
+      "name": "mercadona",
+      "file": "tools/mercadona.py",
+      "description": "Search Mercadona's catalog, price items, and manage your cart via the mercadona-cli. Actions: 'search' (find products by name), 'batch' (resolve multiple items to IDs+prices), 'product' (get details for a specific product ID), 'price_list' (price all items on the shopping list), 'cart_get' (show current cart), 'cart_add' (add product to cart), 'cart_clear' (empty the cart), 'set_postal' (set warehouse from postal code), 'status' (check CLI installation and auth state).",
+      "deps": [],
+      "sha256": "356337beb9742acd56b03fb4bf07111d8554806c185be391145752d86ebda986",
+      "provenance": {
+        "contributed_by": "curated",
+        "source": "jaato-client-telegram/examples/host_tools",
+        "added": "2026-07-04"
+      }
+    },
+    {
+      "name": "moon_phase",
+      "file": "tools/moon_phase.py",
+      "description": "Show today's moon phase with a realistic PIL-rendered image and illumination percentage. Sends the result as a photo to Telegram.",
+      "deps": [],
+      "sha256": "011c63286e09185051949fefedbe1c3749d2669b7bb334e69224f73edee0c9b1",
+      "provenance": {
+        "contributed_by": "curated",
+        "source": "jaato-client-telegram/examples/host_tools",
+        "added": "2026-07-04"
+      }
+    },
+    {
+      "name": "remind",
+      "file": "tools/remind.py",
+      "description": "Create, list, or cancel scheduled reminders. When a reminder fires it WAKES the assistant (resuming the session if it went idle) to tell the user and act on it — not a static message. An absolute 'time' (HH:MM) is interpreted in the user's timezone; set it once with action='set_tz'.",
+      "deps": [],
+      "sha256": "8be2c88b0b2948f9cf91a5b97c9a9a6d2cae8c3763167be0e927c031a4ca834b",
+      "provenance": {
+        "contributed_by": "curated",
+        "source": "jaato-client-telegram/examples/host_tools",
+        "added": "2026-07-04"
+      }
+    },
+    {
+      "name": "reverse_text",
+      "file": "tools/reverse_text.py",
+      "description": "Reverse a given text string.",
+      "deps": [],
+      "sha256": "45b0ed6662f1ac0a4de0a0914f7ffec44fb18cf673a2d3c4d6495c3c4de90932",
+      "provenance": {
+        "contributed_by": "curated",
+        "source": "jaato-client-telegram/examples/host_tools",
+        "added": "2026-07-04"
+      }
+    },
+    {
+      "name": "screenshot",
+      "file": "tools/screenshot.py",
+      "description": "Render a Telegram-style chat screenshot from provided messages. Pass messages as a JSON array of {sender, text, is_bot, time} objects. Also supports reading from a persistent message log.",
+      "deps": [],
+      "sha256": "e2423cb9e6c0981595a3225e217bf809d3e139f3d1d668d5384f2dfd84a80814",
+      "provenance": {
+        "contributed_by": "curated",
+        "source": "jaato-client-telegram/examples/host_tools",
+        "added": "2026-07-04"
+      }
+    },
+    {
+      "name": "shopping_list",
+      "file": "tools/shopping_list.py",
+      "description": "Manage a persistent shopping list stored in the workspace. Actions: 'add' (append items), 'list' (show all items), 'remove' (delete specific items), 'clear' (wipe the whole list).",
+      "deps": [],
+      "sha256": "e19f71938ed34bfa9e25e5ee46abb0bb39217226e46d246db48c410f9d6f51be",
+      "provenance": {
+        "contributed_by": "curated",
+        "source": "jaato-client-telegram/examples/host_tools",
+        "added": "2026-07-04"
+      }
+    },
+    {
+      "name": "spanish_news",
+      "file": "tools/spanish_news.py",
+      "description": "Fetch the latest headlines from major Spanish news sources via RSS feeds. Actions: 'digest' (fetch and return top headlines from all sources), 'sources' (list available sources), 'fetch' (fetch from a specific source). Returns headlines with links, titles, and short descriptions.",
+      "deps": [],
+      "sha256": "74d6f62a3b205ec8a2ca92092b201d24d61e493618e856c8aa4589feb5c61c80",
+      "provenance": {
+        "contributed_by": "curated",
+        "source": "jaato-client-telegram/examples/host_tools",
+        "added": "2026-07-04"
+      }
+    },
+    {
+      "name": "ttt",
+      "file": "tools/ttt.py",
+      "description": "Tic-tac-toe game. Actions: 'new' (start game), 'move' (place X/O at position 1-9). Sends board image with inline keyboard to Telegram.",
+      "deps": [],
+      "sha256": "fc1b6bac8b863e4180a143eace30d58e3830c86ee9a76eea717243b8b1367516",
+      "provenance": {
+        "contributed_by": "curated",
+        "source": "jaato-client-telegram/examples/host_tools",
+        "added": "2026-07-04"
+      }
+    },
+    {
+      "name": "weather",
+      "file": "tools/weather.py",
+      "description": "Get the weather forecast for today (and optionally tomorrow). Uses Open-Meteo API (free, no key needed). Defaults to London.",
+      "deps": [],
+      "sha256": "0ae6aa1de13ad110533a6553b03f873b8c4b6acbfee73dc6d8e0d405f6d9a488",
+      "provenance": {
+        "contributed_by": "curated",
+        "source": "jaato-client-telegram/examples/host_tools",
+        "added": "2026-07-04"
+      }
+    },
+    {
+      "name": "youtube_search",
+      "file": "tools/youtube_search.py",
+      "description": "Search YouTube and return the top matching videos with titles, URLs, durations, channels, and view counts.",
+      "deps": [],
+      "sha256": "f7b47bfaad2a1aec136fdaffec9f082467173804dc990287018ab9712a876d4a",
+      "provenance": {
+        "contributed_by": "curated",
+        "source": "jaato-client-telegram/examples/host_tools",
+        "added": "2026-07-04"
+      }
+    }
+  ]
+}

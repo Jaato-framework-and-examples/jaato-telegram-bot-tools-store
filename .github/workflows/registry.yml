@@ -1,0 +1,43 @@
+name: Regenerate registry
+
+# When a tool is added/changed on main (i.e. a PR merged), regenerate
+# registry.json from tools/ and commit it. The registry is auto-generated —
+# contributors never hand-edit it. This runs only on tools/ or generator
+# changes, and its own registry-only commit does NOT re-trigger (path filter),
+# so there is no loop.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "tools/**"
+      - "generate_registry.py"
+      - ".github/workflows/registry.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: registry-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Regenerate registry.json
+        run: python generate_registry.py
+      - name: Commit if changed
+        run: |
+          if git diff --quiet -- registry.json; then
+            echo "registry.json already up to date"
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add registry.json
+          git commit -m "chore(registry): regenerate from tools/ [skip ci]"
+          git push
