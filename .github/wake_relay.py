@@ -67,7 +67,10 @@ def main() -> int:
         "ts": int(time.time()),
     }).encode("utf-8")
 
-    priv = load_pem_private_key(os.environ["STORE_WAKE_PRIVKEY"].encode(), password=None)
+    # The secret is stored base64-encoded on a SINGLE line: a multi-line PEM does
+    # not survive GitHub's secret->env injection intact (framing breaks). Decode
+    # back to the raw PEM bytes here. Set it with: base64 -w0 key.pem | gh secret set.
+    priv = load_pem_private_key(base64.b64decode(os.environ["STORE_WAKE_PRIVKEY"]), password=None)
     sig = base64.b64encode(priv.sign(body)).decode()
 
     req = urllib.request.Request(
