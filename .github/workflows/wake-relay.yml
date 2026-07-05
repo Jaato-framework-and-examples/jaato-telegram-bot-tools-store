@@ -34,17 +34,20 @@ jobs:
           K: ${{ secrets.STORE_WAKE_PRIVKEY }}
         run: |
           python - <<'PY'
-          import os, base64
-          v = os.environ["K"]
-          print("len:", len(v))
-          print("prefix:", repr(v[:20]))
-          print("suffix:", repr(v[-10:]))
-          print("contains newline:", "\n" in v, "| contains dash:", "-" in v)
+          import os, base64, cryptography
+          from cryptography.hazmat.primitives.serialization import load_pem_private_key
+          d = base64.b64decode(os.environ["K"])
+          lines = d.split(b"\n")
+          print("crypto_version:", cryptography.__version__)
+          print("decoded_len:", len(d), "num_lines:", len(lines))
+          print("line_lens:", [len(x) for x in lines])
+          print("first_line:", repr(lines[0]))
+          print("last_nonempty_line:", repr([l for l in lines if l][-1]))
+          print("last_3_bytes:", repr(d[-3:]))
           try:
-              d = base64.b64decode(v)
-              print("b64decode -> OK, decoded_len:", len(d), "decoded_prefix:", d[:18])
+              load_pem_private_key(d, password=None); print("LOAD -> OK")
           except Exception as e:
-              print("b64decode -> FAIL:", type(e).__name__, str(e)[:60])
+              print("LOAD -> FAIL:", type(e).__name__, "|", str(e)[:90])
           PY
       - name: sign + POST wake
         env:
