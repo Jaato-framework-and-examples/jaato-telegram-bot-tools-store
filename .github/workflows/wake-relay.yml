@@ -7,6 +7,7 @@ name: wake-relay
 on:
   pull_request_review:
     types: [submitted]
+  workflow_dispatch: {}   # TEMP: manual trigger to diagnose the signing-secret shape
 
 # Read-only token; the relay authenticates to the daemon with the store's signing
 # key (STORE_WAKE_PRIVKEY secret), not the GITHUB_TOKEN.
@@ -28,6 +29,23 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install --quiet cryptography
+      - name: DIAG secret shape (temp)
+        env:
+          K: ${{ secrets.STORE_WAKE_PRIVKEY }}
+        run: |
+          python - <<'PY'
+          import os, base64
+          v = os.environ["K"]
+          print("len:", len(v))
+          print("prefix:", repr(v[:20]))
+          print("suffix:", repr(v[-10:]))
+          print("contains newline:", "\n" in v, "| contains dash:", "-" in v)
+          try:
+              d = base64.b64decode(v)
+              print("b64decode -> OK, decoded_len:", len(d), "decoded_prefix:", d[:18])
+          except Exception as e:
+              print("b64decode -> FAIL:", type(e).__name__, str(e)[:60])
+          PY
       - name: sign + POST wake
         env:
           STORE_WAKE_PRIVKEY: ${{ secrets.STORE_WAKE_PRIVKEY }}
