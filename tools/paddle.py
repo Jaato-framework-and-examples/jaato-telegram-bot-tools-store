@@ -5,7 +5,7 @@ Tracks pair history to avoid repeating couples until unavoidable.
 
 Actions:
   init     - Set up the player pool
-  pair     - Generate random pairings for a game day, given who is absent
+  pair     - Generate random pairings for a game day, given absentees (supports multiple)
   history  - Show pairing history and stats
   reset    - Clear all history
 """
@@ -38,7 +38,7 @@ TOOL_SCHEMA = {
             "absent": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "List of absent players this week. For 'pair'."
+                "description": "One or more absent players (supports multiple). For 'pair'."
             },
         },
         "required": ["action"],
