@@ -127,15 +127,18 @@ delivered as **untrusted data**, never as instructions. Full design:
 `STORE_WAKE_PRIVKEY` Actions secret. Asymmetric by design: holding the public key
 lets you *verify* a wake but never *forge* one.
 
-**Enabling it on a bot (both required, else off):**
-1. `JAATO_TOOLSTORE_WAKE_PUBKEY` = the contents of `wake-pubkey.pem` — the key the
-   bot's session declares it trusts (a deliberate trust decision).
-2. `JAATO_WAKE_PUBLIC_ENDPOINT` = the bot's own daemon wake URL, reachable from
-   GitHub Actions (e.g. `https://your-host/wake`; the ingress is configured in the
-   daemon's `~/.jaato/wake.json`). Safe to expose — every wake is signature-gated.
+**Nothing is configured on the bot — it's all auto-detected at publish time.** There
+are no keys or URLs to set. When `share_tool` opens a PR it:
+1. **fetches [`wake-pubkey.pem`](wake-pubkey.pem) from this store** (the same place it
+   reads the registry + tool files) and declares it as the binding's trust key, and
+2. **learns its own wake endpoint from its daemon** (the daemon reports it from its
+   `~/.jaato/wake.json` at bind time) and embeds it in the PR as a routing marker.
 
-Trust is **per binding, per session**: a bot is only wakeable for the PRs it opened,
-and only by wakes signed with the store key it declared.
+So enabling the feature is purely operator-side on the daemon: turn on the wake
+ingress in `~/.jaato/wake.json` and make it reachable from GitHub Actions (a public
+bind or reverse proxy — safe to expose, every wake is signature-gated). Trust is
+**per binding, per session**: a bot is only wakeable for the PRs it opened, and only
+by wakes signed with the store key.
 
 ## Tool contract (host tools)
 
