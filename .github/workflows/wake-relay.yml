@@ -1,26 +1,23 @@
 name: wake-relay
 
-# When a reviewer submits a review on a contributed-tool PR, sign a wake and POST
-# it to the contributing bot's daemon so the bot's session is woken to address the
-# feedback. See .github/wake_relay.py and
+# STAGE 1 of the review-wake relay. Triggered by pull_request_review, which for a
+# FORK PR has NO access to repo secrets — so this stage does only the secret-free
+# work: extract the wake payload + non-secret endpoint marker and upload it as an
+# artifact. STAGE 2 (wake-relay-sign, on workflow_run) holds the signing key and
+# does the sign+POST. See .github/wake_prepare.py and
 # jaato-client-telegram/docs/design/pr-review-feedback-loop.md.
 on:
   pull_request_review:
     types: [submitted]
-  workflow_dispatch: {}   # TEMP: manual trigger to diagnose the signing-secret shape
 
-# Read-only token; the relay authenticates to the daemon with the store's signing
-# key (STORE_WAKE_PRIVKEY secret), not the GITHUB_TOKEN.
 permissions:
   contents: read
 
 jobs:
-  relay:
+  prepare:
     runs-on: ubuntu-latest
     steps:
-      # SECURITY: pull_request_review runs with repo secrets in scope, so we check
-      # out the TRUSTED base branch (never the PR head / fork code) and only run the
-      # base-repo relay script. We never execute fork-supplied code with the secret.
+      # Trusted base code only (never the PR head / fork code).
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.repository.default_branch }}
@@ -28,28 +25,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install --quiet cryptography
-      - name: DIAG secret shape (temp)
-        env:
-          K: ${{ secrets.STORE_WAKE_PRIVKEY }}
-        run: |
-          python - <<'PY'
-          import os, base64, cryptography
-          from cryptography.hazmat.primitives.serialization import load_pem_private_key
-          d = base64.b64decode(os.environ["K"])
-          lines = d.split(b"\n")
-          print("crypto_version:", cryptography.__version__)
-          print("decoded_len:", len(d), "num_lines:", len(lines))
-          print("line_lens:", [len(x) for x in lines])
-          print("first_line:", repr(lines[0]))
-          print("last_nonempty_line:", repr([l for l in lines if l][-1]))
-          print("last_3_bytes:", repr(d[-3:]))
-          try:
-              load_pem_private_key(d, password=None); print("LOAD -> OK")
-          except Exception as e:
-              print("LOAD -> FAIL:", type(e).__name__, "|", str(e)[:90])
-          PY
-      - name: sign + POST wake
-        env:
-          STORE_WAKE_PRIVKEY: ${{ secrets.STORE_WAKE_PRIVKEY }}
-        run: python .github/wake_relay.py
+      - name: extract wake payload
+        run: python .github/wake_prepare.py
+      - name: upload wake payload
+        if: ${{ hashFiles('wake_payload.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: wake-payload
+          path: wake_payload.json
+          retention-days: 1
