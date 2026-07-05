@@ -110,6 +110,17 @@
       }
     },
     {
+      "name": "paddle",
+      "file": "tools/paddle.py",
+      "description": "Organize paddle couples from a pool of 8-10 players. Avoids repeating pairs until unavoidable. Actions: init (set player pool), pair (generate weekly couples given absentees), history (show stats), reset (clear history).",
+      "deps": [],
+      "sha256": "8d68a985785cf69f82679cb96f2c389b2815273bcf99a8bd54d886a9bc6403b1",
+      "provenance": {
+        "contributed_by": "community",
+        "added": ""
+      }
+    },
+    {
       "name": "remind",
       "file": "tools/remind.py",
       "description": "Create, list, or cancel scheduled reminders. When a reminder fires it WAKES the assistant (resuming the session if it went idle) to tell the user and act on it — not a static message. An absolute 'time' (HH:MM) is interpreted in the user's timezone; set it once with action='set_tz'.",
