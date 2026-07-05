@@ -106,6 +106,37 @@ self-attributed, and a leaked token affects only that one bot. (This is also why
 single **GitHub App is deliberately not used** — one app would mean one shared key
 across every bot, or every contributor registering their own app.)
 
+## Review-wake (optional): the bot reacts to your PR review automatically
+
+When a maintainer reviews a `share_tool` PR, the bot that opened it can be **woken
+to address the feedback on its own** — no human relaying "the reviewers commented,
+go fix it". Opt-in, off by default.
+
+**How it works (no secret in the PR).** At share time the bot registers a
+*session-scoped* wake binding on its own daemon — declaring the store's **public**
+signing key as the trust anchor — and embeds a non-secret routing marker in the PR
+body (`<!-- jaato-wake endpoint=... -->`). When a review is submitted, this repo's
+`wake-relay` workflow signs a small wake body with the store's **private** key and
+POSTs it to that endpoint. The daemon verifies the signature against the key the bot
+declared, then wakes the session (reviving it if idle) with the review text —
+delivered as **untrusted data**, never as instructions. Full design:
+`jaato-client-telegram/docs/design/pr-review-feedback-loop.md`.
+
+**The store keypair.** The **public** half is published here as
+[`wake-pubkey.pem`](wake-pubkey.pem); the **private** half lives only as this repo's
+`STORE_WAKE_PRIVKEY` Actions secret. Asymmetric by design: holding the public key
+lets you *verify* a wake but never *forge* one.
+
+**Enabling it on a bot (both required, else off):**
+1. `JAATO_TOOLSTORE_WAKE_PUBKEY` = the contents of `wake-pubkey.pem` — the key the
+   bot's session declares it trusts (a deliberate trust decision).
+2. `JAATO_WAKE_PUBLIC_ENDPOINT` = the bot's own daemon wake URL, reachable from
+   GitHub Actions (e.g. `https://your-host/wake`; the ingress is configured in the
+   daemon's `~/.jaato/wake.json`). Safe to expose — every wake is signature-gated.
+
+Trust is **per binding, per session**: a bot is only wakeable for the PRs it opened,
+and only by wakes signed with the store key it declared.
+
 ## Tool contract (host tools)
 
 ```python
