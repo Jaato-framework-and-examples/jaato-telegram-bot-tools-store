@@ -1,7 +1,8 @@
 """Paddle Tournament Organizer
 
 Manages a pool of 8-10 players for weekly paddle matches.
-A session needs at least 4 players (1 court, 2v2). Handles odd numbers with a rotating substitute.
+A session needs at least 4 players (1 court, 2v2). Each court needs exactly 2 pairs (4 players).
+Handles odd player counts or odd pair counts by rotating substitutes in mid-game.
 Tracks pair history to avoid repeating couples until unavoidable.
 
 Actions:
@@ -75,15 +76,17 @@ def _pair_count(history: list[dict], p1: str, p2: str) -> int:
 
 
 def _generate_pairs(players: list[str], history: list[dict]) -> list[list[str]]:
-    """Try many random shuffles, keep the one with fewest repeat couples."""
+    """Try many random shuffles, keep the one with fewest repeat couples.
+    Handles odd player counts by making floor(n/2) pairs; the odd one out is handled upstream."""
     n = len(players)
+    even_n = n - (n % 2)  # round down to even
     best = None
     best_max = float("inf")
 
     for _ in range(3000):
         shuffled = players[:]
         random.shuffle(shuffled)
-        pairs = [[shuffled[i], shuffled[i+1]] for i in range(0, n, 2)]
+        pairs = [[shuffled[i], shuffled[i+1]] for i in range(0, even_n, 2)]
         mx = max(_pair_count(history, a, b) for a, b in pairs)
         if mx < best_max:
             best_max = mx
@@ -162,7 +165,7 @@ async def execute(args: dict, ctx) -> dict:
         if len(available) < 4:
             return {"error": f"Only {len(available)} available — need at least 4 for 1 court (2v2)."}
 
-        # Odd player? one sits out as substitute
+        # Odd player count? one sits out as substitute
         substitute = None
         if len(available) % 2 != 0:
             random.shuffle(available)
@@ -175,25 +178,34 @@ async def execute(args: dict, ctx) -> dict:
             bench = available[8:]
             available = available[:8]
 
-        courts = len(available) // 2
         history = _load_json(HISTORY_FILE)
         pairs = _generate_pairs(available, history)
+
+        num_pairs = len(pairs)
+        # Odd number of pairs? last pair is the waiting pair (rotates in mid-game)
+        waiting_pair = None
+        if num_pairs % 2 != 0:
+            waiting_pair = pairs.pop()
+        playing_pairs = pairs
+        num_courts = len(playing_pairs) // 2
 
         # Save round
         history.append({
             "date": datetime.now().strftime("%Y-%m-%d"),
             "absent": absent,
-            "pairs": pairs,
+            "pairs": playing_pairs,
         })
         _save_json(HISTORY_FILE, history)
 
         # Format output
-        lines = [f"\nToday's couples ({courts} court{'s' if courts > 1 else ''}):\n"]
+        lines = [f"\nToday's couples ({num_courts} court{'s' if num_courts > 1 else ''}):\n"]
         if substitute:
-            lines.append(f"🔄 Substitute (sits out first): {substitute}\n")
+            lines.append(f"\U0001f504 Substitute (sits out first): {substitute}\n")
+        lines.append(_fmt_pairs(playing_pairs, history))
+        if waiting_pair:
+            lines.append(f"\n🔄 Waiting pair (rotates in mid-game): {waiting_pair[0]} & {waiting_pair[1]}")
         if bench:
-            lines.append(f"⚠️ On the bench: {', '.join(bench)}\n")
-        lines.append(_fmt_pairs(pairs, history))
+            lines.append(f"⚠️ On the bench: {', '.join(bench)}")
         return {"result": "\n".join(lines)}
 
     return {"error": f"Unknown action: {action}"}
