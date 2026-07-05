@@ -1,6 +1,7 @@
 """Paddle Tournament Organizer
 
-Manages a pool of 8-10 players for weekly paddle matches (4 pairs per session).
+Manages a pool of 8-10 players for weekly paddle matches.
+A session needs at least 4 players (1 court, 2v2). Handles odd numbers with a rotating substitute.
 Tracks pair history to avoid repeating couples until unavoidable.
 
 Actions:
@@ -108,8 +109,8 @@ async def execute(args: dict, ctx) -> dict:
     # ---- INIT ----
     if action == "init":
         players = args.get("players", [])
-        if len(players) < 8 or len(players) > 10:
-            return {"error": "Need between 8 and 10 players."}
+        if len(players) < 4 or len(players) > 10:
+            return {"error": "Need between 4 and 10 players."}
         if len(set(players)) != len(players):
             return {"error": "Duplicate names found."}
         _save_json(POOL_FILE, {"players": players})
@@ -152,21 +153,29 @@ async def execute(args: dict, ctx) -> dict:
     if action == "pair":
         pool = _load_json(POOL_FILE)
         all_players = pool.get("players", [])
-        if len(all_players) < 8:
-            return {"error": "No pool set. Run 'init' first with at least 8 players."}
+        if len(all_players) < 4:
+            return {"error": "No pool set. Run 'init' first with at least 4 players."}
 
         absent = args.get("absent", [])
         available = [p for p in all_players if p not in absent]
 
-        if len(available) < 8:
-            return {"error": f"Only {len(available)} available — need 8."}
+        if len(available) < 4:
+            return {"error": f"Only {len(available)} available — need at least 4 for 1 court (2v2)."}
 
+        # Odd player? one sits out as substitute
+        substitute = None
+        if len(available) % 2 != 0:
+            random.shuffle(available)
+            substitute = available.pop()
+
+        # Cap at 8 (2 courts); extras go to bench
         bench = []
         if len(available) > 8:
             random.shuffle(available)
             bench = available[8:]
             available = available[:8]
 
+        courts = len(available) // 2
         history = _load_json(HISTORY_FILE)
         pairs = _generate_pairs(available, history)
 
@@ -179,7 +188,9 @@ async def execute(args: dict, ctx) -> dict:
         _save_json(HISTORY_FILE, history)
 
         # Format output
-        lines = ["\nToday's couples:\n"]
+        lines = [f"\nToday's couples ({courts} court{'s' if courts > 1 else ''}):\n"]
+        if substitute:
+            lines.append(f"🔄 Substitute (sits out first): {substitute}\n")
         if bench:
             lines.append(f"⚠️ On the bench: {', '.join(bench)}\n")
         lines.append(_fmt_pairs(pairs, history))
