@@ -1,0 +1,39 @@
+name: wake-relay-sign
+
+# STAGE 2 of the review-wake relay. workflow_run runs in the TRUSTED base-repo
+# context WITH repository secrets (unlike pull_request_review on a fork PR), so the
+# Ed25519 signing key lives here. It downloads STAGE 1's wake-payload artifact,
+# signs the raw body, and POSTs the wake. See .github/wake_sign.py.
+on:
+  workflow_run:
+    workflows: [wake-relay]
+    types: [completed]
+
+permissions:
+  actions: read      # read the triggering run's artifact
+  contents: read
+
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install --quiet cryptography
+      - name: download wake payload
+        uses: actions/download-artifact@v4
+        continue-on-error: true      # no artifact => STAGE 1 had nothing to relay
+        with:
+          name: wake-payload
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: sign + POST wake
+        env:
+          STORE_WAKE_PRIVKEY: ${{ secrets.STORE_WAKE_PRIVKEY }}
+        run: python .github/wake_sign.py
