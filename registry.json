@@ -18,7 +18,7 @@
       "file": "tools/daily_ephemerides.py",
       "description": "Daily historical ephemerides -- tells you what happened on this day in history. Actions: 'now' (send today's ephemerides immediately), 'schedule' (set up a daily recurring broadcast at a given time), 'cancel' (cancel the daily schedule).",
       "deps": [],
-      "sha256": "fc6a86bdbb8859be2180818dfecc9373f669ec66da655332b58fccc679e73e03",
+      "sha256": "a51c168b4feaeebf8ad597a684543bbed808afc8af698e88069c6d1df6b1ca21",
       "provenance": {
         "contributed_by": "curated",
         "source": "jaato-client-telegram/examples/host_tools",
