@@ -47,7 +47,7 @@ TOOL_SCHEMA = {
 }
 
 HEADERS = {
-    "User-Agent": "JaatoBot/1.0 (daily-ephemerides-tool; contact via Telegram bot)"
+    "User-Agent": "JaatoBot/1.0 (https://jaato.example.com; contact@jaato.example.com) daily-ephemerides-tool/1.0"
 }
 
 MONTH_NAMES = {
@@ -82,7 +82,7 @@ LANG_WIKI = {
 
 SECTION_NAMES = {
     "en": {"events": "Events", "births": "Births", "deaths": "Deaths", "holidays": "Holidays and observances"},
-    "es": {"events": "Eventos", "births": "Nacimientos", "deaths": "Fallecimientos", "holidays": "Celebraciones"},
+    "es": {"events": "Acontecimientos", "births": "Nacimientos", "deaths": "Fallecimientos", "holidays": "Celebraciones"},
     "ca": {"events": "Esdeveniments", "births": "Naixements", "deaths": "Defuncions", "holidays": "Celebracions"},
     "fr": {"events": "Événements", "births": "Naissances", "deaths": "Décès", "holidays": "Fêtes et célébrations"},
     "de": {"events": "Ereignisse", "births": "Geboren", "deaths": "Gestorben", "holidays": "Feier- und Gedenktage"},
@@ -155,9 +155,17 @@ def _pick_items(items, max_count=5):
 
 
 def _get_page_title(month, day, lang="en"):
-    """Get the Wikipedia page title for a given date."""
+    """Get the Wikipedia page title for a given date.
+    English Wikipedia uses 'Month_Day' (e.g. 'July_6').
+    Most other languages use 'Day_month' (e.g. '6_de_julio', '6_de_juliol')."""
+    if lang == "en":
+        return f"{MONTH_NAMES[month]}_{day}"
+    # day_month format for non-English Wikipedias
     months = LANG_MONTHS.get(lang, MONTH_NAMES)
-    return f"{months[month]}_{day}"
+    if lang in ("es", "ca", "pt"):
+        return f"{day}_de_{months[month]}"
+    else:
+        return f"{day} {months[month]}"
 
 
 def _format_message(sections, lang="en"):
@@ -224,18 +232,22 @@ async def _fetch_onthisday(month, day, lang="en"):
     """Fetch and parse the Wikipedia day page for events, births, deaths, holidays."""
     wiki = LANG_WIKI.get(lang, "en.wikipedia.org")
     page_title = _get_page_title(month, day, lang)
-    url = f"https://{wiki}/w/api.php?action=parse&page={page_title}&prop=text&format=json"
+    url = f"https://{wiki}/w/api.php?action=parse&page={page_title}&prop=text&format=json&redirects=1"
 
     try:
         async with aiohttp.ClientSession(headers=HEADERS) as session:
             async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    html = data.get("parse", {}).get("text", {}).get("*", "")
-                    if html:
-                        return _extract_sections(html)
+                if resp.status != 200:
+                    return None
+                # Read as text first to avoid ContentTypeError on non-JSON responses
+                raw = await resp.text()
+                import json
+                data = json.loads(raw)
+                html = data.get("parse", {}).get("text", {}).get("*", "")
+                if html:
+                    return _extract_sections(html)
                 return None
-    except Exception:
+    except Exception as e:
         return None
 
 
