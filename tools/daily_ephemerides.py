@@ -47,7 +47,7 @@ TOOL_SCHEMA = {
 }
 
 HEADERS = {
-    "User-Agent": "JaatoBot/1.0 (https://jaato.example.com; contact@jaato.example.com) daily-ephemerides-tool/1.0"
+    "User-Agent": "JaatoBot/1.0 (https://jaato.example.com; apanoiahotmail.com) daily-ephemerides-tool/1.0"
 }
 
 MONTH_NAMES = {
