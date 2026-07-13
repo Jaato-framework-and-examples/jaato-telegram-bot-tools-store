@@ -121,6 +121,17 @@
       }
     },
     {
+      "name": "receipt_scanner",
+      "file": "tools/receipt_scanner.py",
+      "description": "Scans supermarket receipt images, extracts product and store information, and stores it in a database for later querying. Actions: store (accepts pre-extracted data from the assistant's vision read), reclassify (change product categories), add_item (append item to existing receipt), query (search by product name, date range, or category), stats (spending summary by category), list (all receipts), categories (browse or list products in a category), export (JSON dump).",
+      "deps": [],
+      "sha256": "ce3ede85a593ac03fb9049f7f7bed9703cca2fe0d919f4cd057905a3339ab1a9",
+      "provenance": {
+        "contributed_by": "community",
+        "added": ""
+      }
+    },
+    {
       "name": "remind",
       "file": "tools/remind.py",
       "description": "Create, list, or cancel scheduled reminders. When a reminder fires it WAKES the assistant (resuming the session if it went idle) to tell the user and act on it — not a static message. An absolute 'time' (HH:MM) is interpreted in the user's timezone; set it once with action='set_tz'.",
