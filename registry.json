@@ -136,7 +136,7 @@
       "file": "tools/remind.py",
       "description": "Create, list, or cancel scheduled reminders. When a reminder fires it WAKES the assistant (resuming the session if it went idle) to tell the user and act on it — not a static message. An absolute 'time' (HH:MM) is interpreted in the user's timezone; set it once with action='set_tz'.",
       "deps": [],
-      "sha256": "2848aa691ddef1652bf340dc4598a4d9786337365b0ad4597765b3e41a0284e6",
+      "sha256": "0b0c98bcd15d87287839f06d801f54613eac0edd67d9c910f132fa5fd499bc55",
       "provenance": {
         "contributed_by": "curated",
         "source": "jaato-client-telegram/examples/host_tools",
