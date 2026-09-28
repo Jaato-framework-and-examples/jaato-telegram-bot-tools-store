@@ -17,6 +17,8 @@ timezone-independent. Reminders persist to JSON and are re-armed at bot startup
 """
 
 import asyncio
+import hashlib
+import calendar
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -100,6 +102,26 @@ def _make_id() -> str:
     return f"r{_next_id}"
 
 
+def _identity(chat_id, text, recurrence, time_str, tz_str) -> str | None:
+    """The stable id of a RECURRING reminder, or ``None`` for a one-shot.
+
+    What makes two daily reminders THE SAME reminder is (chat, clock time,
+    timezone, recurrence, text) — not the counter id, which used to be minted
+    fresh on every reschedule.  With an ephemeral id nothing could recognise a
+    reminder it already had, so the store accumulated one identical copy per
+    firing and ``_restore`` armed a timer for each: one 07:00 reminder, six
+    wakes.  Deriving the id from the identity makes that unrepresentable —
+    a duplicate collides with itself in ``_reminders`` and in the store.
+
+    A one-shot keeps a counter id on purpose: two identical one-shots are two
+    reminders, not one, because the user asked for it twice.
+    """
+    if not recurrence:
+        return None
+    raw = f"{chat_id}|{time_str}|{tz_str}|{recurrence}|{text}"
+    return "r" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
+
+
 def _target_from_delay(delay_minutes: int) -> datetime:
     return _now() + timedelta(minutes=delay_minutes)
 
@@ -147,44 +169,61 @@ def _load() -> list[dict]:
         return json.loads(STORE_PATH.read_text())
     except (json.JSONDecodeError, KeyError):
         return []
-
-
+def _add_month(dt: datetime) -> datetime:
+    """``dt`` advanced by one calendar month, clamping the day to the target
+    month's last valid day (e.g. Jan 31 → Feb 28/29). No fallback branch:
+    ``calendar.monthrange`` always yields a length for a valid (year, month),
+    so ``min(day, last)`` is always in range."""
+    m = dt.month + 1
+    y = dt.year
+    if m > 12:
+        m = 1
+        y += 1
+    last_day = calendar.monthrange(y, m)[1]
+    return dt.replace(year=y, month=m, day=min(dt.day, last_day))
 
 
 def _next_target(time_str: str, tz_str: str, recurrence: str) -> datetime:
-    """Compute the next occurrence after *now* for a recurring reminder.
-    Always looks FORWARD from today's clock-time in the user's timezone."""
+    """Next occurrence STRICTLY after now, at the recurrence interval, anchored
+    to the just-fired clock time in the user's timezone. Called right after a
+    firing, so it normally steps exactly once; the loop also self-heals if the
+    bot was down across several intervals. Returns an AWARE UTC datetime."""
     tz = ZoneInfo(tz_str)
     now_local = datetime.now(tz)
     hour, minute = map(int, time_str.split(":"))
     candidate = now_local.replace(hour=hour, minute=minute, second=0, microsecond=0)
-    if candidate <= now_local:
-        candidate += timedelta(days=1)
-    if recurrence == "daily":
-        pass  # candidate is already tomorrow
-    elif recurrence == "weekly":
-        # advance to next week same weekday if needed (candidate is already +1 day)
-        pass  # +1 day is sufficient for weekly
-    elif recurrence == "monthly":
-        # try same day next month; if invalid (e.g. 31→Feb), use last day
-        try:
-            m = candidate.month + 1
-            y = candidate.year
-            if m > 12:
-                m = 1
-                y += 1
-            import calendar
-            last_day = calendar.monthrange(y, m)[1]
-            day = min(candidate.day, last_day)
-            candidate = candidate.replace(year=y, month=m, day=day)
-        except Exception:
-            candidate += timedelta(days=30)
+    while candidate <= now_local:
+        if recurrence == "weekly":
+            candidate += timedelta(weeks=1)
+        elif recurrence == "monthly":
+            candidate = _add_month(candidate)
+        else:  # daily
+            candidate += timedelta(days=1)
     return candidate.astimezone(timezone.utc)
 
 def _wake_prompt(text: str) -> str:
+    # Stamp the real fire time so the model has an authoritative "now". Nothing
+    # injects the current date server-side, and a reminder always wakes a
+    # COLD-REVIVED session whose only date reference is the resumed history -
+    # full of PRIOR daily firings. Without this stamp the model anchors "today"
+    # to a stale past firing and treats this firing as an already-done duplicate.
+    # Timezone is the user's saved zone (_load_tz); UTC when none was ever set -
+    # the scheduler's own base clock (see _now()), not an invented default.
+    tz = _load_tz()
+    now_local = datetime.now(ZoneInfo(tz)) if tz else _now()
+    day = now_local.strftime("%A %d %b %Y")
+    clock = now_local.strftime("%H:%M %Z").strip()
     return (
-        f"\u23f0 A scheduled reminder just fired: \"{text}\". "
-        f"Let the user know now, and take any action it implies."
+        f"⏰ A scheduled reminder fired just now — {day}, {clock}. "
+        f"This is a fresh firing for TODAY ({day}); any identical reminders "
+        f"earlier in the conversation were on previous days, not this one. "
+        f"Reminder: \"{text}\". Let the user know now and take any action it "
+        f"implies, treating the date above as \"today\". "
+        f"CRITICAL - run this reminder EXACTLY ONCE per firing. Call each "
+        f"tool it needs AT MOST ONCE, deliver your single reply, then STOP "
+        f"and end the turn with NO further tool calls. Do NOT re-fetch, "
+        f"re-run any tool, or repeat the reminder: once you have answered "
+        f"this firing, it is DONE."
     )
 
 
@@ -208,7 +247,9 @@ async def _fire(wake, chat_id: int, text: str, rid: str, target: datetime, recur
         # Reschedule recurring reminders
         if recurrence and time_str and tz_str:
             next_target = _next_target(time_str, tz_str, recurrence)
-            new_rid = _make_id()
+            # Keep the identity across firings — and migrate a legacy counter
+            # id ("r220") forward to it, which is what stops the store growing.
+            new_rid = _identity(chat_id, text, recurrence, time_str, tz_str) or _make_id()
             _schedule(wake, chat_id, new_rid, text, next_target,
                       recurrence=recurrence, time_str=time_str, tz_str=tz_str)
             _save()
@@ -218,6 +259,12 @@ async def _fire(wake, chat_id: int, text: str, rid: str, target: datetime, recur
 
 def _schedule(wake, chat_id: int, rid: str, text: str, target: datetime, recurrence: str = None, time_str: str = None, tz_str: str = None):
     loop = asyncio.get_running_loop()
+    # Replacing an entry in the dict does NOT stop the timer it indexed: an
+    # asyncio task is owned by the loop.  Cancel first, or the "replaced" one
+    # keeps sleeping and fires alongside its replacement.
+    prev = _reminders.get(rid)
+    if prev is not None and not prev.done():
+        prev.cancel()
     task = loop.create_task(_fire(wake, chat_id, text, rid, target, recurrence=recurrence, time_str=time_str, tz_str=tz_str))
     task._rid = rid
     task._text = text
@@ -235,6 +282,7 @@ async def _restore(wake) -> int:
     global _next_id
     now = _now()
     restored = 0
+    seen: set = set()
     for entry in _load():
         rid = entry["id"]
         target = datetime.fromisoformat(entry["target"])
@@ -242,6 +290,16 @@ async def _restore(wake) -> int:
             target = target.replace(tzinfo=timezone.utc)  # legacy naive → assume UTC
         if target <= now and not entry.get("recurrence"):
             continue  # already expired, skip
+        # A store written before identities existed can hold several rows for
+        # one reminder; arm it ONCE.  Legacy rows are re-keyed to the identity.
+        ident = _identity(entry.get("chat_id", 0), entry["text"], entry.get("recurrence"),
+                          entry.get("time_str"), entry.get("tz_str"))
+        key = ident or rid
+        if key in seen:
+            continue
+        seen.add(key)
+        if ident:
+            rid = ident
         _schedule(wake, entry.get("chat_id", 0), rid, entry["text"], target, recurrence=entry.get("recurrence"), time_str=entry.get("time_str"), tz_str=entry.get("tz_str"))
         # keep _next_id above any restored ID
         try:
@@ -254,6 +312,21 @@ async def _restore(wake) -> int:
     if restored:
         _save()
     return restored
+
+
+def on_unload() -> None:
+    """Release every armed timer because this module is being replaced.
+
+    Called by the host-tool loader when the file changed or was removed.  The
+    replacement module restores from the same store, so without this the two
+    modules' timers would both be live and the reminder would fire twice —
+    exactly the failure the loader's module cache exists to prevent, arriving
+    by the one door that legitimately reloads.
+    """
+    for task in list(_reminders.values()):
+        if not task.done():
+            task.cancel()
+    _reminders.clear()
 
 
 async def on_startup(wake) -> int:
