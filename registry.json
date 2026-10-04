@@ -54,7 +54,7 @@
       "file": "tools/docker_status.py",
       "description": "Report the status of Docker containers. Shows running, stopped, and total counts with per-container details including name, image, status, ports, and uptime.",
       "deps": [],
-      "sha256": "ae2b5bced089933e2cf14787249e8d39237d376b3d19df355ebaad407dd97b18",
+      "sha256": "e03385058e1870741a54404615d1df5d5c6d161bb99a6664c950a2e02305ff42",
       "provenance": {
         "contributed_by": "curated",
         "source": "jaato-client-telegram/examples/host_tools",
